@@ -10,15 +10,15 @@ The term sheet text uses a two-column table format where labels and values are s
   "Project:\n\nSolar Project Abakawaka...\n\n"
 
 Strip any leading "Developer ", "Seller ", or "Buyer " prefix from the value to get the actual company name.
-So "Developer Earthly Pizza" → developer = "Earthly Pizza"
-And "Buyer ABaBa" → buyer = "ABaBa"
+So "Developer Earthly Pizza" -> developer = "Earthly Pizza"
+And "Buyer ABaBa" -> buyer = "ABaBa"
 
 For COD: look for "Target Commercial Operation Date", "TCOD", "COD". Extract just the date (e.g. "April 1, 2026").
 
 Also check the Confidentiality section for patterns like:
 "Kinect Energy, Inc. (on behalf of Buyer) and National Grid Renewables (on behalf of Seller)"
 
-REQUIRED OUTPUT FORMAT - Return valid JSON only:
+REQUIRED OUTPUT FORMAT - Return valid JSON only, no other text:
 {
   "deal": {
     "buyer": "EXACT BUYER COMPANY NAME",
@@ -35,19 +35,51 @@ REQUIRED OUTPUT FORMAT - Return valid JSON only:
   },
   "terms": {
     "strike": 35, "floating": 35, "interval": 35, "negprice": 35, "invoice": 35,
-    "basis": 35, "curtailment": 35, "ia": 35, "cp": 35, "delay": 35,
-    "avail": 35, "permit": 35, "buyerpa": 35, "sellerpa": 35, "assign": 35,
-    "fm": 35, "eod": 35, "eterm": 35, "product": 35, "recs": 35,
-    "govlaw": 35, "conf": 35, "excl": 35, "expenses": 35, "acct": 35,
-    "marketdisrupt": 35, "cod": 35, "changeinlaw": 35, "reputation": 35,
-    "incentives": 35, "publicity": 35
+    "basis": 35, "marketdisrupt": 35, "scheduling": 35,
+    "curtailment": 35, "nonecocurtail": 35, "basiscurtail": 35,
+    "ia": 35, "cp": 35, "delay": 35, "availmech": 35, "availguaranteed": 35,
+    "permit": 35, "cod": 35,
+    "buyerpa": 35, "sellerpa": 35,
+    "assign": 35, "fm": 35, "eod": 35, "eterm": 35, "changeinlaw": 35, "reputation": 35,
+    "product": 35, "recs": 35, "incentives": 35,
+    "govlaw": 35, "conf": 35, "excl": 35, "expenses": 35, "acct": 35, "publicity": 35
   },
-  "unusualProvisions": [],
-  "missingProtections": []
+  "unusualProvisions": [
+    {
+      "provision": "Short name of unusual clause",
+      "severity": "CRITICAL",
+      "description": "What this clause does",
+      "impact": "Financial or operational impact on buyer",
+      "recommendation": "What buyer should do"
+    }
+  ],
+  "missingProtections": [
+    {
+      "protection": "Short name of missing protection",
+      "standard": "What market standard requires",
+      "risk": "Risk to buyer if missing"
+    }
+  ]
 }
 
+IMPORTANT: unusualProvisions severity must be "CRITICAL", "ATTENTION", or "INFO".
+Only populate unusualProvisions if you detect clauses genuinely unusual for a standard VPPA.
+Only populate missingProtections if standard protections are genuinely absent.
+Return empty arrays [] if nothing found. Never return placeholder or example objects.
+
 SCORING SCALE (0-100): 0-25 Buyer-favorable, 26-50 Market standard, 51-75 Seller-favorable, 76-100 Critical/Red flag
-DETECT unusual provisions like: project replacement, MAC clauses, most favored customer, regulatory out.`;
+
+TERM SCORING GUIDE:
+- availmech: mechanical availability guarantee (90-95% wind, 94-99% solar = ~35; absent = 90+)
+- availguaranteed: guaranteed annual production (absent or % of capacity = ~10; fixed MWh guarantee = 85+)
+- curtailment: annual curtailment hour cap (no cap = ~35; tight cap = 10-20; no auto trigger = 85+)
+- nonecocurtail: non-economic curtailment (narrow/standard = ~25; broad or undefined = 80+)
+- basiscurtail: basis curtailment protection (deemed gen = ~10; REC replacement = ~35; excused outage = ~70; none = 90+)
+- scheduling: seller QSE responsibility (seller bears all = ~25; undefined = 85+)
+- changeinlaw: change in law (no effect either party = ~15; renegotiation trigger = ~70; cost pass-through = 90+)
+
+DETECT unusual provisions like: project replacement rights, MAC clauses, most favored customer, regulatory out, seller walk rights, uncapped liability.
+DETECT missing protections like: negative price protection, availability guarantee, OCOD termination right, seller performance assurance, REC replacement.`
 
 exports.handler = async (event, context) => {
   const headers = {
