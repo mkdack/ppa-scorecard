@@ -217,17 +217,38 @@ async function analyzeTermSheet() {
 // ═══════════════════════════════════════════════════════════════
 
 async function analyzeWithClaude(termSheet) {
-  updateProgress(20, 'Sending to Claude Sonnet 4.6...', 'AI analysis in progress');
-  
-  const response = await fetch(API_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ termSheet })
-  });
-  
-  updateProgress(70, 'Processing AI response...', 'Extracting scores');
+  updateProgress(20, 'Sending to Claude...', 'AI analysis in progress');
+
+  // Animate progress bar so it doesn't look frozen during API wait
+  const messages = [
+    [25, 'Reading term structure...'],
+    [32, 'Scanning pricing terms...'],
+    [40, 'Analyzing curtailment provisions...'],
+    [47, 'Reviewing credit & collateral...'],
+    [54, 'Checking project development terms...'],
+    [61, 'Evaluating contract terms...'],
+    [67, 'Scoring legal provisions...'],
+  ];
+  let msgIdx = 0;
+  const progressTimer = setInterval(() => {
+    if (msgIdx < messages.length) {
+      const [pct, label] = messages[msgIdx++];
+      updateProgress(pct, label, 'AI analysis in progress');
+    }
+  }, 2000);
+
+  let response;
+  try {
+    response = await fetch(API_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ termSheet })
+    });
+  } finally {
+    clearInterval(progressTimer);
+  }
+
+  updateProgress(75, 'Processing AI response...', 'Extracting scores');
   
   if (!response.ok) {
     const error = await response.json();
