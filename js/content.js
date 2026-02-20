@@ -38,7 +38,7 @@ function getZone(p) { return ZONES.find(z => p >= z.min && p < z.max) || ZONES[3
 
 const SCORECARD_GROUPS = [
   { id: 'pricing', title: 'Pricing & Settlement',       terms: ['strike', 'floating', 'interval', 'negprice', 'invoice', 'basis', 'marketdisrupt'] },
-  { id: 'shape',   title: 'Shape & Curtailment',        terms: ['curtailment'] },
+  { id: 'shape',   title: 'Shape & Curtailment',        terms: ['curtailment', 'basiscurtail'] },
   { id: 'dev',     title: 'Project Development',        terms: ['ia', 'cp', 'delay', 'avail', 'permit', 'cod'] },
   { id: 'credit',  title: 'Credit & Collateral',        terms: ['buyerpa', 'sellerpa'] },
   { id: 'contract',title: 'Contract Terms',             terms: ['assign', 'fm', 'eod', 'eterm', 'changeinlaw', 'reputation'] },
@@ -54,6 +54,7 @@ const TERM_META = {
   invoice:      { name: 'Invoicing & Payment Terms',       category: 'Settlement Period',         icon: '🧾', defaultPos: 0, group: 'pricing',  flexibility: 'flexible' },
   basis:        { name: 'Basis Risk',                      category: 'Settlement Point',          icon: '📍', defaultPos: 0, group: 'pricing',  flexibility: 'inflexible' },
   curtailment:  { name: 'Economic Curtailment',            category: 'Shape & Curtailment',       icon: '⚡', defaultPos: 0, group: 'shape',    flexibility: 'flexible' },
+  basiscurtail: { name: 'Basis Curtailment',               category: 'Shape & Curtailment',       icon: '📡', defaultPos: 0, group: 'shape',    flexibility: 'inflexible' },
   ia:           { name: 'Interconnection Status',          category: 'Development Risk',          icon: '🔌', defaultPos: 0, group: 'dev',      flexibility: 'flexible' },
   cp:           { name: 'Seller Conditions Precedent',     category: 'Development Risk',          icon: '📋', defaultPos: 0, group: 'dev',      flexibility: 'flexible' },
   delay:        { name: 'Delay & Shortfall Damages',       category: 'COD Risk',                  icon: '📅', defaultPos: 0, group: 'dev',      flexibility: 'inflexible' },
@@ -247,6 +248,27 @@ const CONTENT = {
         impactsub: key === 'buyer' ? 'Seller absorbs all<br>curtailment exposure' : key === 'market' ? 'Risk shared equally<br>CEBA standard' : key === 'seller' ? '75% buyer-borne<br>above market' : '100% on buyer<br>do not sign',
         rec: key === 'red' ? 'REJECT. 100% buyer-borne curtailment is unacceptable market practice. Minimum: 50/50 shared. Push for seller-borne.' : key === 'seller' ? 'Negotiate to 50/50. 75% buyer-borne is significantly above market.' : 'Curtailment allocation acceptable.',
         reclabel: key === 'red' ? 'Priority 1 — Reject' : key === 'seller' ? 'Priority — Negotiate to 50/50' : 'Outcome — Acceptable'
+      };
+    }
+  },
+
+
+  basiscurtail: {
+    getContent(p) {
+      const key = p <= 25 ? 'buyer' : p <= 50 ? 'market' : p <= 75 ? 'seller' : 'red';
+      const iso = DEAL.iso || 'ERCOT';
+      const isERCOT = iso.toUpperCase().includes('ERCOT');
+      const context = isERCOT ? 'In ERCOT West and South zones, basis curtailment can affect 5–20% of annual hours on congested gen-tie paths.' : 'Basis curtailment frequency varies by ISO and project location — congested zones can see 500+ hours annually.';
+      return {
+        term: key === 'buyer' ? '<strong>Deemed generation applies during basis curtailment hours.</strong> If the project is curtailed by ISO dispatch due to negative nodal/busbar price while hub LMP is positive, seller must settle as if generating at hub price. RECs delivered for deemed hours.' :
+              key === 'market' ? '<strong>REC replacement obligation covers basis curtailment shortfall.</strong> If project is curtailed due to congestion (busbar negative, hub positive), seller must source and deliver equivalent vintage RECs within 90 days. No settlement adjustment.' :
+              key === 'seller' ? '<strong>Availability guarantee covers basis curtailment hours as excused outages.</strong> Basis curtailment hours do not count against availability — seller faces no LD exposure. Buyer receives no RECs and no settlement adjustment for curtailed hours.' :
+              '<strong>No basis curtailment protection.</strong> When the project is curtailed due to local congestion — hub price positive, busbar negative — buyer continues paying strike price with no floating offset and receives no RECs. Full double-payment exposure.',
+        bench: `Standard: REC replacement obligation for basis curtailment shortfall is emerging market standard. Deemed generation (full settlement continuation) is buyer-favorable but increasingly negotiable on congested nodes. ${context}`,
+        impact: key === 'buyer' ? 'DEEMED GENERATION' : key === 'market' ? 'REC REPLACEMENT' : key === 'seller' ? 'EXCUSED OUTAGE' : 'NO PROTECTION',
+        impactsub: key === 'buyer' ? 'Hub settlement + RECs<br>during curtailed hours' : key === 'market' ? 'No settlement adjust<br>replacement RECs sourced' : key === 'seller' ? 'Excused outage<br>no RECs, no adjustment' : 'Strike pay continues<br>zero RECs delivered',
+        rec: key === 'red' ? `Add basis curtailment REC replacement obligation at minimum. Without it, buyer pays strike on hours the project never generated and loses RECs. ${isERCOT ? 'ERCOT congestion makes this a material exposure.' : 'Material exposure on congested interconnections.'}` : key === 'seller' ? 'Deemed generation is preferred. If seller resists, require REC replacement obligation — availability excused outage treatment leaves buyer with zero recourse.' : 'Basis curtailment treatment acceptable.',
+        reclabel: key === 'red' ? 'Priority 1 — Add REC Replacement' : key === 'seller' ? 'Priority — Add REC Replacement' : 'Outcome — Acceptable'
       };
     }
   },
