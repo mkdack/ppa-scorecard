@@ -21,7 +21,8 @@ Return this exact JSON structure:
   "missingProtections": [{"protection":"name","standard":"market standard","risk":"buyer risk"}]
 }
 
-Only include items in unusualProvisions/missingProtections if genuinely found. Return [] if none.`
+Only include items in unusualProvisions/missingProtections if genuinely found. Return [] if none.
+Be concise: keep all string values under 25 words. Max 3 items per array.`
 
 exports.handler = async (event, context) => {
   const headers = {
@@ -58,8 +59,8 @@ exports.handler = async (event, context) => {
         'anthropic-version': ANTHROPIC_VERSION
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 1500,
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2500,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: `Analyze this VPPA/PPA term sheet.
 
