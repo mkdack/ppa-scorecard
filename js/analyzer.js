@@ -284,8 +284,18 @@ function parseTermSheetRules(text) {
   analysis.terms.negprice = scoreNegPrice(text);
   analysis.terms.invoice = scoreInvoice(text);
   analysis.terms.basis = scoreBasis(text);
-  analysis.terms.avail = scoreAvailability(text);
+  analysis.terms.availmech = scoreAvailability(text);
+  analysis.terms.availguaranteed = scoreGuaranteedAvailability(text);
   analysis.terms.permit = scorePermit(text);
+  analysis.terms.cod = scoreCOD(text);
+  analysis.terms.marketdisrupt = scoreMarketDisrupt(text);
+  analysis.terms.scheduling = scoreScheduling(text);
+  analysis.terms.nonecocurtail = scoreNonEcoCurtailment(text);
+  analysis.terms.basiscurtail = scoreBasisCurtailment(text);
+  analysis.terms.changeinlaw = scoreChangeInLaw(text);
+  analysis.terms.reputation = scoreReputation(text);
+  analysis.terms.incentives = scoreIncentives(text);
+  analysis.terms.publicity = scorePublicity(text);
   analysis.terms.buyerpa = scoreBuyerPA(text);
   analysis.terms.eod = scoreEOD(text);
   analysis.terms.eterm = scoreETerm(text);
@@ -547,6 +557,105 @@ function scorePermit(text) {
   const lower = text.toLowerCase();
   if (lower.includes('fm') && lower.includes('permit')) return 65;
   return 50;
+}
+
+function scoreGuaranteedAvailability(text) {
+  const lower = text.toLowerCase();
+  if (lower.includes('no guaranteed') || lower.includes('not guarantee') || lower.includes('percentage of')) return 20;
+  if (lower.includes('guaranteed annual production') || lower.includes('fixed mwh')) return 78;
+  if (lower.includes('buyer\'s share') && lower.includes('%')) return 25;
+  return 50;
+}
+
+function scoreCOD(text) {
+  const lower = text.toLowerCase();
+  if (lower.includes('outside commercial operation') || lower.includes('ocod')) {
+    if (lower.includes('180 days') || lower.includes('six months')) return 22;
+    if (lower.includes('12 months') || lower.includes('one year')) return 55;
+    return 40;
+  }
+  if (lower.includes('target cod') || lower.includes('target commercial operation')) return 35;
+  return 70; // No OCOD defined is seller-favorable/red
+}
+
+function scoreMarketDisrupt(text) {
+  const lower = text.toLowerCase();
+  if (lower.includes('market disruption') && lower.includes('good faith')) return 35;
+  if (lower.includes('seller') && lower.includes('reference price')) return 85;
+  if (lower.includes('historic average') || lower.includes('true-up')) return 30;
+  if (!lower.includes('market disruption')) return 45;
+  return 50;
+}
+
+function scoreScheduling(text) {
+  const lower = text.toLowerCase();
+  if (lower.includes('qualified scheduling entity') || lower.includes('qse') || lower.includes('market participant')) {
+    if (lower.includes('seller shall act') || lower.includes('seller acts')) return 25;
+    return 40;
+  }
+  if (lower.includes('third party') && lower.includes('schedul')) return 65;
+  return 55; // No provision defaults to seller-favorable
+}
+
+function scoreNonEcoCurtailment(text) {
+  const lower = text.toLowerCase();
+  if (lower.includes('non-economic curtailment') || lower.includes('non economic curtailment')) {
+    if (lower.includes('system emergency') && lower.includes('forced outage')) return 25;
+    if (lower.includes('maintenance')) return 68; // Broad definition
+    return 40;
+  }
+  if (lower.includes('iso/rto') && lower.includes('curtailment')) return 35;
+  return 55;
+}
+
+function scoreBasisCurtailment(text) {
+  const lower = text.toLowerCase();
+  if (lower.includes('deemed generation') && lower.includes('basis')) return 20;
+  if (lower.includes('rec replacement') && lower.includes('congestion')) return 38;
+  if (lower.includes('basis curtailment') && lower.includes('excused')) return 65;
+  if (lower.includes('busbar') || lower.includes('nodal') && lower.includes('curtail')) return 50;
+  return 60; // Most deals have no basis curtailment protection
+}
+
+function scoreChangeInLaw(text) {
+  const lower = text.toLowerCase();
+  if (lower.includes('change in law') || lower.includes('change of law')) {
+    if (lower.includes('fixed price') && (lower.includes('not affected') || lower.includes('shall not be affected'))) return 22;
+    if (lower.includes('renegotiat') || lower.includes('re-negotiat')) return 65;
+    if (lower.includes('seller') && lower.includes('terminat')) return 82;
+    if (lower.includes('cost pass')) return 88;
+    return 40;
+  }
+  return 50;
+}
+
+function scoreReputation(text) {
+  const lower = text.toLowerCase();
+  if (lower.includes('reputational') || lower.includes('public opposition') || lower.includes('wildlife')) {
+    if (lower.includes('ongoing') || lower.includes('notify') || lower.includes('cooperat')) return 20;
+    return 38;
+  }
+  if (lower.includes('esg') || lower.includes('environmental stewardship')) return 30;
+  return 55;
+}
+
+function scoreIncentives(text) {
+  const lower = text.toLowerCase();
+  if (lower.includes('ancillary') && lower.includes('buyer')) {
+    if (lower.includes('net revenue') || lower.includes('share')) return 22;
+  }
+  if (lower.includes('seller retain') && lower.includes('capacity')) return 55;
+  if (lower.includes('itc') || lower.includes('investment tax credit')) return 45;
+  return 50;
+}
+
+function scorePublicity(text) {
+  const lower = text.toLowerCase();
+  if (lower.includes('prior written consent') || lower.includes('mutual consent')) return 22;
+  if (lower.includes('buyer consent') && lower.includes('public')) return 30;
+  if (lower.includes('seller may') && lower.includes('announce')) return 72;
+  if (!lower.includes('publicity') && !lower.includes('press release')) return 60;
+  return 45;
 }
 
 function scoreBuyerPA(text) {
