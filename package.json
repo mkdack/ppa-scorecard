@@ -1,0 +1,21 @@
+{
+  "name": "ppa-scorecard",
+  "version": "1.0.0",
+  "description": "PPA Deal Scorecard with Anthropic Claude AI Analysis",
+  "scripts": {
+    "dev": "netlify dev",
+    "deploy": "netlify deploy --prod"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.0.0"
+  },
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "mammoth": "^1.11.0",
+    "pdf-parse": "^2.4.5"
+  }
+}

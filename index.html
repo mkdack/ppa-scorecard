@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PPA Deal Scorecard — Renewable Energy Term Sheet Analysis</title>
+<meta name="description" content="Interactive PPA term sheet analysis tool for renewable energy deals. Score 31 key contract terms, assess risks, and benchmark against market standards.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,600;9..144,700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="wrapper">
+
+<!-- INTAKE MODAL -->
+<div id="intakeOverlay" class="intake-overlay" onclick="if(event.target===this)closeIntake()">
+  <div class="intake-modal">
+    <div class="intake-header">
+      <div class="intake-title">
+        <div class="intake-icon">⚡</div>
+        <div>
+          <div class="intake-heading">Analyze New Term Sheet</div>
+          <div class="intake-sub">Paste text or upload a file — AI will score all 31 terms automatically</div>
+        </div>
+      </div>
+      <button class="intake-close" onclick="closeIntake()" aria-label="Close">✕</button>
+    </div>
+
+    <div class="intake-tabs">
+      <button class="itab active" id="itab-paste" onclick="switchTab('paste')">
+        <span>📋</span> Paste Text
+      </button>
+      <button class="itab" id="itab-upload" onclick="switchTab('upload')">
+        <span>📄</span> Upload File
+      </button>
+    </div>
+
+    <div id="ipanel-paste" class="ipanel active">
+      <textarea id="termsheetText" class="intake-textarea" placeholder="Paste your term sheet here — plain text, Word content, or PDF text...
+
+The AI will read every provision and score all 31 terms automatically."></textarea>
+    </div>
+
+    <div id="ipanel-upload" class="ipanel">
+      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()" ondragover="handleDragOver(event)" ondrop="handleDrop(event)">
+        <div class="upload-icon">📄</div>
+        <div class="upload-label">Drop file here or click to browse</div>
+        <div class="upload-sub">Supports .txt, .pdf, .doc, and .docx files</div>
+        <div class="upload-filename" id="uploadFilename"></div>
+      </div>
+      <input type="file" id="fileInput" accept=".txt,.pdf,.docx,.doc" style="display:none" onchange="handleFileSelect(event)">
+    </div>
+
+    <div id="intakeError" class="intake-error" style="display:none"></div>
+
+    <div class="intake-footer">
+      <div class="intake-hint" id="intakeHint">AI will extract deal terms and set all 31 sliders based on its analysis</div>
+      <div class="intake-actions">
+        <button class="intake-cancel" onclick="closeIntake()">Cancel</button>
+        <button class="intake-analyze" id="analyzeBtn" onclick="analyzeTermSheet()">
+          <span id="analyzeBtnText">⚡ Analyze Term Sheet</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ANALYZING OVERLAY -->
+<div id="analyzingOverlay" class="analyzing-overlay" style="display:none">
+  <div class="analyzing-box">
+    <div class="analyzing-spinner"></div>
+    <div class="analyzing-label" id="analyzingLabel">Reading term sheet...</div>
+    <div class="analyzing-sub" id="analyzingSub">Extracting provisions across 16 sections</div>
+    <div class="analyzing-progress">
+      <div class="analyzing-bar" id="analyzingBar"></div>
+    </div>
+  </div>
+</div>
+
+<!-- FLOATING ANALYZE BUTTON -->
+<button class="fab-analyze" id="fabAnalyze" onclick="openIntake()" title="Analyze new term sheet">
+  <span class="fab-icon">⚡</span>
+  <span class="fab-label">New Term Sheet</span>
+</button>
+
+<!-- HEADER -->
+<header class="header">
+  <div>
+    <div class="brand"><div class="brand-mark">PP</div><div class="brand-name">PPA Deal Scorecard</div></div>
+    <h1 class="deal-title" id="dealTitle">Upload a Term Sheet</h1>
+    <div class="deal-meta">
+      <div class="meta-item">PROJECT <span id="metaProject">—</span></div>
+      <div class="meta-item">BUYER <span id="metaBuyer">—</span></div>
+      <div class="meta-item">SELLER <span id="metaSeller">—</span></div>
+      <div class="meta-item">ISO <span id="metaISO">—</span></div>
+      <div class="meta-item">TECH <span id="metaTech">—</span></div>
+      <div class="meta-item">STRIKE <span id="metaStrike" title="">—</span></div>
+      <div class="meta-item">TERM <span id="metaTerm" title="">—</span></div>
+      <div class="meta-item">COD <span id="metaCOD" title="">—</span></div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="header-actions">
+      <button class="ctrl-btn" onclick="resetAll()"><span class="ctrl-icon">↺</span>Reset to Original</button>
+      <button class="ctrl-btn" id="themeToggle" onclick="toggleTheme()"><span class="ctrl-icon">🌙</span><span class="theme-label">Dark</span></button>
+    </div>
+    <span class="overall-label">Overall Rating</span>
+    <div class="overall-badge" id="overallBadge" style="opacity:0.5">—</div>
+  </div>
+</header>
+
+<!-- SUMMARY STRIP -->
+<div class="summary-strip">
+  <div class="s-card"><div class="s-label">Critical Issues</div><div class="s-value" id="sumCritical">—</div><div class="s-sub" id="sumCriticalSub">upload term sheet to begin</div></div>
+  <div class="s-card"><div class="s-label">Overall Rating</div><div class="s-value" id="sumRating" style="font-size:13px;font-family:'DM Mono',monospace;font-weight:600">—</div><div class="s-sub" id="sumRatingSub">upload term sheet to begin</div></div>
+  <div class="s-card"><div class="s-label">Terms Reviewed</div><div class="s-value" id="sumTerms">0 / 31</div><div class="s-sub">upload term sheet to begin</div></div>
+</div>
+
+<!-- FILTER BAR -->
+<div class="filter-bar">
+  <span class="filter-label">Filter</span>
+  <button class="filter-btn f-all active"       onclick="setFilter('all',this)">     <span class="f-dot"></span>All Terms      <span class="f-count">31</span></button>
+  <button class="filter-btn f-critical" onclick="setFilter('critical',this)"><span class="f-dot"></span>Critical       <span class="f-count" id="fc-critical">—</span></button>
+  <button class="filter-btn f-high"      onclick="setFilter('high',this)">    <span class="f-dot"></span>High           <span class="f-count" id="fc-high">—</span></button>
+  <button class="filter-btn f-moderate"  onclick="setFilter('moderate',this)"><span class="f-dot"></span>Moderate       <span class="f-count" id="fc-moderate">—</span></button>
+  <button class="filter-btn f-info"      onclick="setFilter('info',this)">    <span class="f-dot"></span>Informational  <span class="f-count" id="fc-info">—</span></button>
+  <button class="filter-btn f-flexible" onclick="setFilter('flexible',this)"><span class="f-dot" style="background:var(--good)"></span>Buyer Flexible       <span class="f-count" id="fc-flexible">—</span></button>
+  <button class="filter-btn f-inflexible" onclick="setFilter('inflexible',this)"><span class="f-dot" style="background:var(--moderate)"></span>Buyer Inflexible     <span class="f-count" id="fc-inflexible">—</span></button>
+</div>
+
+<!-- CRITICAL CALLOUT -->
+<div class="critical-callout" id="criticalCallout">
+  <div class="cc-icon" id="ccIcon">⚠️</div>
+  <div class="cc-text" id="ccText"><strong id="ccStrong"></strong> <span id="ccDetail"></span></div>
+</div>
+
+<!-- SCORECARD CONTENT -->
+<div id="scorecardContainer">
+  <!-- Content injected by JavaScript -->
+</div>
+
+<div class="empty-state" id="emptyState">No terms match this filter.</div>
+
+<!-- UNUSUAL PROVISIONS SECTION -->
+<div id="unusualProvisionsSection" style="display:none; margin-top:30px; padding:20px; background:var(--panel-bg); border-radius:12px; border:1px solid var(--border-color);">
+  <h3 style="margin:0 0 15px 0; font-size:16px; color:var(--text-color);">⚠️ Unusual Provisions Detected</h3>
+  <div id="unusualProvisionsList"></div>
+</div>
+
+<!-- MISSING PROTECTIONS SECTION -->
+<div id="missingProtectionsSection" style="display:none; margin-top:20px; padding:20px; background:var(--panel-bg); border-radius:12px; border:1px solid var(--border-color);">
+  <h3 style="margin:0 0 15px 0; font-size:16px; color:var(--text-color);">🛡️ Missing Standard Protections</h3>
+  <div id="missingProtectionsList"></div>
+</div>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-text">Commercial analysis only — not legal advice. Benchmarks reflect Q4 2025 market intelligence for 15-year fixed-price VPPAs. Engage qualified energy counsel before executing any contract.</div>
+  <div class="btn-row">
+    <button class="btn-ghost" onclick="showFullAnalysisReport()">View Full Report</button>
+  </div>
+</footer>
+
+</div><!-- /wrapper -->
+
+<script src="js/content.js"></script>
+<script src="js/analyzer.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
