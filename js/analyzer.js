@@ -161,6 +161,9 @@ async function analyzeTermSheet() {
     
     updateProgress(90, 'Applying analysis...', 'Updating scorecard');
     
+    // Store term sheet for deep analysis second pass
+    window.lastTermSheet = text;
+
     // Apply the analysis
     applyAnalysis(analysis);
     
@@ -169,6 +172,14 @@ async function analyzeTermSheet() {
     await sleep(300);
     document.getElementById('analyzingOverlay').style.display = 'none';
     closeIntake();
+
+    // Show Deep Analysis button now that first pass is done
+    const deepBtn = document.getElementById('deepAnalysisBtn');
+    if (deepBtn) {
+      deepBtn.style.display = '';
+      deepBtn.disabled = false;
+      deepBtn.innerHTML = '<span class="ctrl-icon">🔬</span>Deep Analysis';
+    }
     
     // Store original analyzed values for reset functionality
     if (typeof storeOriginalAnalyzedValues === 'function') {
@@ -1118,4 +1129,144 @@ function displayMissingProtections(protections) {
   
   list.innerHTML = html;
   container.style.display = 'block';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DEEP ANALYSIS — SECOND PASS WITH SONNET
+// ═══════════════════════════════════════════════════════════════
+
+async function runDeepAnalysis() {
+  if (!window.lastTermSheet) {
+    alert('No term sheet loaded. Please upload and analyze a term sheet first.');
+    return;
+  }
+
+  const btn = document.getElementById('deepAnalysisBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="ctrl-icon">⏳</span>Analyzing...';
+
+  const overlay = document.getElementById('deepAnalyzingOverlay');
+  const bar = document.getElementById('deepAnalyzingBar');
+  const label = document.getElementById('deepAnalyzingLabel');
+  const sub = document.getElementById('deepAnalyzingSub');
+  overlay.style.display = 'flex';
+
+  // Animate progress
+  const steps = [
+    [15, 'Reading flagged terms...', 'Identifying seller-favorable provisions'],
+    [30, 'Analyzing pricing terms...', 'Strike price, basis, settlement point'],
+    [45, 'Reviewing credit & collateral...', 'Performance assurance, EOD triggers'],
+    [60, 'Examining development terms...', 'COD, delay damages, IA conditions'],
+    [75, 'Drafting recommendations...', 'Negotiation priorities'],
+  ];
+  let stepIdx = 0;
+  const timer = setInterval(() => {
+    if (stepIdx < steps.length) {
+      const [pct, l, s] = steps[stepIdx++];
+      bar.style.width = pct + '%';
+      label.textContent = l;
+      sub.textContent = s;
+    }
+  }, 2500);
+
+  try {
+    const controller = new AbortController();
+    const fetchTimeout = setTimeout(() => controller.abort(), 24000);
+
+    const response = await fetch('/api/deep-analysis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        termSheet: window.lastTermSheet,
+        scores: window.sliderValues || {}
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(fetchTimeout);
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    bar.style.width = '100%';
+    label.textContent = 'Complete!';
+
+    setTimeout(() => {
+      overlay.style.display = 'none';
+      bar.style.width = '0%';
+    }, 500);
+
+    // Render executive summary
+    if (result.executiveSummary) {
+      document.getElementById('executiveSummaryText').textContent = result.executiveSummary;
+      document.getElementById('executiveSummarySection').style.display = 'block';
+    }
+
+    // Render unusual provisions (override first-pass results)
+    if (result.unusualProvisions && result.unusualProvisions.length > 0) {
+      displayUnusualProvisions(result.unusualProvisions);
+    }
+
+    // Render missing protections (override first-pass results)
+    if (result.missingProtections && result.missingProtections.length > 0) {
+      displayMissingProtections(result.missingProtections);
+    }
+
+    // Inject inline analysis into each term card
+    if (result.termAnalysis) {
+      injectTermAnalysis(result.termAnalysis);
+    }
+
+    btn.innerHTML = '<span class="ctrl-icon">✅</span>Deep Analysis Done';
+
+  } catch (err) {
+    clearInterval(timer);
+    overlay.style.display = 'none';
+    bar.style.width = '0%';
+    console.error('Deep analysis failed:', err);
+    btn.disabled = false;
+    btn.innerHTML = '<span class="ctrl-icon">🔬</span>Deep Analysis';
+    alert('Deep analysis failed: ' + err.message + '. Please try again.');
+  } finally {
+    clearInterval(timer);
+  }
+}
+
+function injectTermAnalysis(termAnalysis) {
+  Object.entries(termAnalysis).forEach(([termId, analysis]) => {
+    // Find the term row by id
+    const card = document.getElementById(`row-${termId}`);
+    if (!card) return;
+
+    // Remove any existing deep analysis panel
+    const existing = card.querySelector('.deep-analysis-panel');
+    if (existing) existing.remove();
+
+    const panel = document.createElement('div');
+    panel.className = 'deep-analysis-panel';
+    panel.style.cssText = `
+      margin-top: 12px;
+      padding: 12px 14px;
+      background: linear-gradient(135deg, rgba(124,58,237,0.06), rgba(79,70,229,0.06));
+      border-left: 3px solid #7c3aed;
+      border-radius: 0 8px 8px 0;
+      font-size: 12px;
+      line-height: 1.6;
+    `;
+
+    panel.innerHTML = `
+      <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+        <span style="font-size:10px; font-weight:700; letter-spacing:0.08em; color:#7c3aed; opacity:0.8;">🔬 DEEP ANALYSIS</span>
+      </div>
+      ${analysis.summary ? `<div style="color:var(--text-primary); margin-bottom:6px;">${analysis.summary}</div>` : ''}
+      ${analysis.risk ? `<div style="color:var(--critical); margin-bottom:6px;">⚠️ ${analysis.risk}</div>` : ''}
+      ${analysis.recommendation ? `<div style="color:var(--accent);">→ ${analysis.recommendation}</div>` : ''}
+    `;
+
+    card.appendChild(panel);
+  });
 }

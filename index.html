@@ -67,6 +67,15 @@ The AI will read every provision and score all 31 terms automatically."></textar
 </div>
 
 <!-- ANALYZING OVERLAY -->
+<div id="deepAnalyzingOverlay" class="analyzing-overlay" style="display:none">
+  <div class="analyzing-card">
+    <div class="analyzing-spinner"></div>
+    <div class="analyzing-label" id="deepAnalyzingLabel">Running deep analysis...</div>
+    <div class="analyzing-sub" id="deepAnalyzingSub">Sonnet reviewing flagged terms</div>
+    <div class="analyzing-track"><div class="analyzing-bar" id="deepAnalyzingBar" style="width:0%"></div></div>
+  </div>
+</div>
+
 <div id="analyzingOverlay" class="analyzing-overlay" style="display:none">
   <div class="analyzing-box">
     <div class="analyzing-spinner"></div>
@@ -103,6 +112,9 @@ The AI will read every provision and score all 31 terms automatically."></textar
   <div class="header-right">
     <div class="header-actions">
       <button class="ctrl-btn" onclick="resetAll()"><span class="ctrl-icon">↺</span>Reset to Original</button>
+      <button class="ctrl-btn ctrl-btn-deep" id="deepAnalysisBtn" onclick="runDeepAnalysis()" style="display:none; background:linear-gradient(135deg,#7c3aed,#4f46e5); color:white; border-color:transparent;">
+        <span class="ctrl-icon">🔬</span>Deep Analysis
+      </button>
       <button class="ctrl-btn" id="themeToggle" onclick="toggleTheme()"><span class="ctrl-icon">🌙</span><span class="theme-label">Dark</span></button>
     </div>
     <span class="overall-label">Overall Rating</span>
@@ -143,6 +155,14 @@ The AI will read every provision and score all 31 terms automatically."></textar
 <div class="empty-state" id="emptyState">No terms match this filter.</div>
 
 <!-- UNUSUAL PROVISIONS SECTION -->
+<div id="executiveSummarySection" style="display:none; margin-bottom:20px; padding:20px; background:linear-gradient(135deg,rgba(124,58,237,0.08),rgba(79,70,229,0.08)); border-radius:12px; border:1px solid rgba(124,58,237,0.3);">
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+    <span style="font-size:18px;">🔬</span>
+    <strong style="font-size:14px; letter-spacing:0.05em; color:var(--accent);">DEEP ANALYSIS — EXECUTIVE SUMMARY</strong>
+  </div>
+  <p id="executiveSummaryText" style="font-size:13px; line-height:1.7; color:var(--text-primary); margin:0;"></p>
+</div>
+
 <div id="unusualProvisionsSection" style="display:none; margin-top:30px; padding:20px; background:var(--panel-bg); border-radius:12px; border:1px solid var(--border-color);">
   <h3 style="margin:0 0 15px 0; font-size:16px; color:var(--text-color);">⚠️ Unusual Provisions Detected</h3>
   <div id="unusualProvisionsList"></div>

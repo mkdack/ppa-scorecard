@@ -59,8 +59,8 @@ exports.handler = async (event, context) => {
         'anthropic-version': ANTHROPIC_VERSION
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 2500,
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2000,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: `Analyze this VPPA/PPA term sheet.
 
