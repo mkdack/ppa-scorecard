@@ -290,6 +290,20 @@ function parseTermSheetRules(text) {
   analysis.deal.strikePrice = extractStrikePrice(text) || 45.00;
   analysis.deal.term = extractTerm(text) || '15 years';
   analysis.deal.cod = extractCOD(text) || 'TBD';
+
+  // Extract party names via regex (same logic as server-side)
+  const buyerMatch =
+    text.match(/^Buyer:\s*\n\n\s*(?:Buyer\s+)?([A-Z][^\n]+)/m) ||
+    text.match(/([A-Z][A-Za-z0-9\s,\.&'-]{2,60}?)\s*\(on behalf of (?:Buyer|Purchaser)\)/i);
+  if (buyerMatch) analysis.deal.buyer = buyerMatch[1].trim();
+
+  const sellerMatch =
+    text.match(/^Seller:\s*\n\n\s*(?:Developer\s+|Seller\s+)?([A-Z][^\n]+)/m) ||
+    text.match(/([A-Z][A-Za-z0-9\s,\.&'-]{2,60}?)\s*\(on behalf of (?:Seller|Developer)\)/i);
+  if (sellerMatch) analysis.deal.developer = sellerMatch[1].trim();
+
+  const projectMatch = text.match(/^Project:\s*\n\n\s*([A-Z][^\n]+)/m);
+  if (projectMatch) analysis.deal.project = projectMatch[1].trim();
   
   // Score each term
   analysis.terms.strike = scoreStrikePrice(text, analysis.deal.strikePrice);
