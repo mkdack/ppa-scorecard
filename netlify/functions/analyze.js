@@ -4,22 +4,19 @@ const ANTHROPIC_VERSION = '2023-06-01';
 
 const SYSTEM_PROMPT = `You are a VPPA/PPA term sheet analyzer. Extract deal information and score contract terms.
 
-CRITICAL - EXTRACTING PARTY NAMES:
-Term sheets often use a table format where the label and value are on separate lines, like:
-  "Seller:"
-  "Developer Earthly Pizza"
-  
-  "Buyer:"
-  "Buyer ABaBa Corp"
+The term sheet text uses a two-column table format where labels and values are separated by blank lines:
+  "Seller:\n\nDeveloper Earthly Pizza\n\n"
+  "Buyer:\n\nBuyer ABaBa\n\n"
+  "Project:\n\nSolar Project Abakawaka...\n\n"
 
-The value line may start with the word "Buyer", "Seller", or "Developer" as a prefix — strip that prefix.
+Strip any leading "Developer ", "Seller ", or "Buyer " prefix from the value to get the actual company name.
 So "Developer Earthly Pizza" → developer = "Earthly Pizza"
-And "Buyer ABaBa Corp" → buyer = "ABaBa Corp"
+And "Buyer ABaBa" → buyer = "ABaBa"
 
-Also check the Confidentiality section — it often names both companies explicitly, e.g.:
-"between Kinect Energy, Inc. (on behalf of Buyer) and National Grid Renewables Development, LLC (on behalf of Seller)"
+For COD: look for "Target Commercial Operation Date", "TCOD", "COD". Extract just the date (e.g. "April 1, 2026").
 
-For COD: look for "Target Commercial Operation Date", "TCOD", "Commercial Operation Date", "COD", "targeted COD". Extract the date value (e.g. "April 1, 2026" or "Q2 2026").
+Also check the Confidentiality section for patterns like:
+"Kinect Energy, Inc. (on behalf of Buyer) and National Grid Renewables (on behalf of Seller)"
 
 REQUIRED OUTPUT FORMAT - Return valid JSON only:
 {
@@ -49,12 +46,7 @@ REQUIRED OUTPUT FORMAT - Return valid JSON only:
   "missingProtections": []
 }
 
-SCORING SCALE (0-100):
-- 0-25: Buyer-favorable
-- 26-50: Market standard
-- 51-75: Seller-favorable
-- 76-100: Critical/Red flag
-
+SCORING SCALE (0-100): 0-25 Buyer-favorable, 26-50 Market standard, 51-75 Seller-favorable, 76-100 Critical/Red flag
 DETECT unusual provisions like: project replacement, MAC clauses, most favored customer, regulatory out.`;
 
 exports.handler = async (event, context) => {
@@ -76,7 +68,7 @@ exports.handler = async (event, context) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Term sheet too short' }) };
     }
 
-    // Prioritize first 10k + last 5k to capture both party definitions and signature blocks
+    // Prioritize first 10k + last 5k to capture party definitions and signature blocks
     let truncatedText;
     if (termSheet.length > 15000) {
       truncatedText = termSheet.substring(0, 10000) + '\n...[middle truncated]...\n' + termSheet.substring(termSheet.length - 5000);
@@ -95,13 +87,14 @@ exports.handler = async (event, context) => {
         model: 'claude-sonnet-4-5-20251001',
         max_tokens: 4000,
         system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: `Analyze this VPPA/PPA term sheet. 
+        messages: [{ role: 'user', content: `Analyze this VPPA/PPA term sheet.
 
-IMPORTANT EXTRACTION NOTES:
-1. Party names may appear as table rows where the value line starts with "Buyer", "Seller", or "Developer" as a prefix — strip that prefix word to get the actual company name
-2. Check the Confidentiality section for explicit company names with roles in parentheses
-3. COD may be labeled "TCOD", "Target COD", or "Target Commercial Operation Date"
-4. Return actual extracted values, never placeholder text
+The format uses labels followed by blank lines then values, e.g.:
+  Seller:\n\nDeveloper Earthly Pizza  →  developer = "Earthly Pizza"
+  Buyer:\n\nBuyer ABaBa Corp  →  buyer = "ABaBa Corp"
+  
+Strip "Developer ", "Seller ", "Buyer " prefixes from values.
+Extract actual company names — never return empty strings if names exist in the text.
 
 Term sheet:
 ${truncatedText}` }]
@@ -115,10 +108,8 @@ ${truncatedText}` }]
 
     const data = await response.json();
     const content = data.content?.[0]?.text || '';
-
     console.log('CLAUDE RAW RESPONSE:', content.substring(0, 2000));
 
-    // Extract JSON
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON found in response');
 
@@ -127,45 +118,56 @@ ${truncatedText}` }]
 
     if (!analysis.deal) analysis.deal = {};
 
-    // ── Regex fallbacks for table-formatted term sheets ──
+    // ── Regex fallbacks — match double-newline table format from mammoth ──
+    // Pattern: "Label:\n\nOptionalPrefix ActualName\n"
 
-    // Buyer: look for "Buyer:\nBuyer CompanyName" or "Buyer: CompanyName"
     if (!analysis.deal.buyer) {
-      // Table format: label on one line, value (possibly prefixed with "Buyer") on next
-      let m = termSheet.match(/^Buyer:\s*\n\s*(?:Buyer\s+)?([A-Z][^\n]{2,60})/m);
-      if (!m) m = termSheet.match(/^Buyer:\s+(?:Buyer\s+)?([A-Z][^\n]{2,60})/m);
-      // Confidentiality section fallback: "Kinect Energy, Inc. (on behalf of Buyer)"
-      if (!m) m = termSheet.match(/([A-Z][A-Za-z0-9\s,\.&'-]{2,60}?)\s*\(on behalf of Buyer\)/i);
+      // "Buyer:\n\nBuyer ABaBa" or "Buyer:\n\nABaBa"
+      const m = termSheet.match(/^Buyer:\s*\n\n\s*(?:Buyer\s+)?([A-Z][^\n]+)/m);
       if (m) analysis.deal.buyer = m[1].trim();
     }
 
-    // Seller/Developer: same table pattern
+    if (!analysis.deal.buyer) {
+      // Confidentiality fallback: "CompanyName (on behalf of Buyer)"
+      const m = termSheet.match(/([A-Z][A-Za-z0-9\s,\.&'-]{2,60}?)\s*\(on behalf of (?:Buyer|Purchaser)\)/i);
+      if (m) analysis.deal.buyer = m[1].trim();
+    }
+
     if (!analysis.deal.developer) {
-      let m = termSheet.match(/^Seller:\s*\n\s*(?:Developer\s+|Seller\s+)?([A-Z][^\n]{2,60})/m);
-      if (!m) m = termSheet.match(/^Seller:\s+(?:Developer\s+|Seller\s+)?([A-Z][^\n]{2,60})/m);
-      // Confidentiality section fallback: "National Grid Renewables Development, LLC (on behalf of Seller)"
-      if (!m) m = termSheet.match(/([A-Z][A-Za-z0-9\s,\.&'-]{2,60}?)\s*\(on behalf of Seller\)/i);
+      // "Seller:\n\nDeveloper Earthly Pizza" or "Seller:\n\nEarthly Pizza"
+      const m = termSheet.match(/^Seller:\s*\n\n\s*(?:Developer\s+|Seller\s+)?([A-Z][^\n]+)/m);
       if (m) analysis.deal.developer = m[1].trim();
     }
 
-    // Project name
+    if (!analysis.deal.developer) {
+      // Confidentiality fallback: "CompanyName (on behalf of Seller)"
+      const m = termSheet.match(/([A-Z][A-Za-z0-9\s,\.&'-]{2,60}?)\s*\(on behalf of (?:Seller|Developer)\)/i);
+      if (m) analysis.deal.developer = m[1].trim();
+    }
+
     if (!analysis.deal.project) {
-      let m = termSheet.match(/^Project:\s*\n\s*([A-Z][^\n]{2,80})/m);
-      if (!m) m = termSheet.match(/^Project:\s+([A-Z][^\n]{2,80})/m);
+      const m = termSheet.match(/^Project:\s*\n\n\s*([A-Z][^\n]+)/m);
       if (m) analysis.deal.project = m[1].trim();
     }
 
-    // COD — handle TCOD, Target COD, Commercial Operation Date, etc.
+    // COD — handle TCOD, Target COD, double-newline format
     if (!analysis.deal.cod) {
       const codPatterns = [
-        /Target(?:ed)?\s+Commercial\s+Operation\s+Date[^:]*:\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d\s*\d{4}|\d{4})/i,
-        /TCOD[^:]*:\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d\s*\d{4}|\d{4})/i,
-        /Commercial\s+Operation\s+Date[^:]*:\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d\s*\d{4}|\d{4})/i,
-        /\bCOD[^:]*:\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d\s*\d{4}|\d{4})/i,
+        /Target(?:ed)?\s+Commercial\s+Operation\s+Date[^:]*:\s*\n\n\s*([^\n]+)/im,
+        /\bTCOD[^:]*:\s*\n\n\s*([^\n]+)/im,
+        /Target(?:ed)?\s+Commercial\s+Operation\s+Date[^:]*:\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d\s*\d{4})/i,
+        /\bTCOD[^:]*:\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d\s*\d{4})/i,
+        /Commercial\s+Operation\s+Date[^:]*:\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d\s*\d{4})/i,
       ];
       for (const pat of codPatterns) {
         const m = termSheet.match(pat);
-        if (m) { analysis.deal.cod = m[1].trim(); break; }
+        if (m) {
+          // Clean up — take just the date part (first line, strip trailing junk)
+          const raw = m[1].trim();
+          const dateOnly = raw.match(/([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d[\s/]*\d{4}|\d{4})/);
+          analysis.deal.cod = dateOnly ? dateOnly[1] : raw.substring(0, 30);
+          break;
+        }
       }
     }
 
@@ -176,7 +178,6 @@ ${truncatedText}` }]
     analysis.unusualProvisions = analysis.unusualProvisions || [];
     analysis.missingProtections = analysis.missingProtections || [];
 
-    // Debug info
     analysis._debug = {
       rawClaudeResponse: content.substring(0, 3000),
       dealExtracted: analysis.deal
