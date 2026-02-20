@@ -238,13 +238,17 @@ async function analyzeWithClaude(termSheet) {
   }, 2000);
 
   let response;
+  const controller = new AbortController();
+  const fetchTimeout = setTimeout(() => controller.abort(), 25000);
   try {
     response = await fetch(API_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ termSheet })
+      body: JSON.stringify({ termSheet }),
+      signal: controller.signal
     });
   } finally {
+    clearTimeout(fetchTimeout);
     clearInterval(progressTimer);
   }
 
@@ -450,13 +454,17 @@ function extractTerm(text) {
 
 function extractCOD(text) {
   const patterns = [
-    // Targeted COD: April 2026, COD: Q2 2027, etc.
-    /(?:targeted|guaranteed|expected)?\s*cod[:\s]+([a-z]+\s+\d{4}|q\d[\s/]*\d{4}|\d{4})/i,
-    // Commercial Operation Date: April 2026
-    /commercial\s*(?:operation)?\s*date[:\s]+([a-z]+\s+\d{4}|q\d[\s/]*\d{4}|\d{4})/i,
-    // COD April 2026 (without colon)
+    // TCOD double-newline format: "Target Commercial Operation Date (TCOD):\n\nMarch 1, 2027"
+    /Target(?:ed)?\s+Commercial\s+Operation\s+Date[^:]*:\s*\n\n\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4})/im,
+    /\bTCOD[^:]*:\s*\n\n\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4})/im,
+    // Inline TCOD: "TCOD: March 1, 2027"
+    /\bTCOD[^:]*:\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d[\s/]*\d{4})/i,
+    // Target Commercial Operation Date: April 1, 2026
+    /Target(?:ed)?\s+Commercial\s+Operation\s+Date[^:]*:\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d[\s/]*\d{4})/i,
+    // Generic COD: April 2026
+    /(?:targeted|guaranteed|expected)?\s*cod[:\s]+([a-z]+\s+\d{1,2},?\s*\d{4}|q\d[\s/]*\d{4}|\d{4})/i,
+    /commercial\s*(?:operation)?\s*date[:\s]+([a-z]+\s+\d{1,2},?\s*\d{4}|q\d[\s/]*\d{4}|\d{4})/i,
     /\bcod\s+([a-z]+\s+\d{4}|q\d[\s/]*\d{4})\b/i,
-    // Just year after COD mention
     /cod.*?\b(20\d{2})\b/i
   ];
   
@@ -541,7 +549,10 @@ function scoreFloatingPrice(text) {
 
 function scoreInterval(text) {
   const lower = text.toLowerCase();
+  if (lower.includes('5-minute') || lower.includes('5 minute') || lower.includes('five-minute') || lower.includes('five minute')) return 15;
+  if (lower.includes('15-minute') || lower.includes('15 minute')) return 25;
   if (lower.includes('hourly')) return 35;
+  if (lower.includes('monthly averaging') || lower.includes('monthly average')) return 70;
   if (lower.includes('monthly')) return 62;
   return 50;
 }
