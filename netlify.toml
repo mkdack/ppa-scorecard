@@ -11,7 +11,7 @@
   node_bundler = "esbuild"
 
 [functions."analyze"]
-  timeout = 30
+  timeout = 26
 
 # API redirect for functions
 [[redirects]]

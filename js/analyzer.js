@@ -239,7 +239,7 @@ async function analyzeWithClaude(termSheet) {
 
   let response;
   const controller = new AbortController();
-  const fetchTimeout = setTimeout(() => controller.abort(), 25000);
+  const fetchTimeout = setTimeout(() => controller.abort(), 24000);
   try {
     response = await fetch(API_ENDPOINT, {
       method: 'POST',
