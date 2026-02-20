@@ -150,56 +150,40 @@ ${truncatedText}` }]
 
     if (!analysis.deal) analysis.deal = {};
 
-    // ── Regex fallbacks — match double-newline table format from mammoth ──
-    // Pattern: "Label:\n\nOptionalPrefix ActualName\n"
+    // ── Regex extraction — always runs as primary source for structured fields ──
+    // Claude often returns placeholder text; regex on the raw term sheet is more reliable.
 
-    if (!analysis.deal.buyer) {
-      // "Buyer:\n\nBuyer ABaBa" or "Buyer:\n\nABaBa"
-      const m = termSheet.match(/^Buyer:\s*\n\n\s*(?:Buyer\s+)?([A-Z][^\n]+)/m);
-      if (m) analysis.deal.buyer = m[1].trim();
-    }
+    // BUYER
+    const buyerMatch =
+      termSheet.match(/^Buyer:\s*\n\n\s*(?:Buyer\s+)?([A-Z][^\n]+)/m) ||
+      termSheet.match(/([A-Z][A-Za-z0-9\s,\.&'-]{2,60}?)\s*\(on behalf of (?:Buyer|Purchaser)\)/i);
+    if (buyerMatch) analysis.deal.buyer = buyerMatch[1].trim();
 
-    if (!analysis.deal.buyer) {
-      // Confidentiality fallback: "CompanyName (on behalf of Buyer)"
-      const m = termSheet.match(/([A-Z][A-Za-z0-9\s,\.&'-]{2,60}?)\s*\(on behalf of (?:Buyer|Purchaser)\)/i);
-      if (m) analysis.deal.buyer = m[1].trim();
-    }
+    // SELLER / DEVELOPER
+    const sellerMatch =
+      termSheet.match(/^Seller:\s*\n\n\s*(?:Developer\s+|Seller\s+)?([A-Z][^\n]+)/m) ||
+      termSheet.match(/([A-Z][A-Za-z0-9\s,\.&'-]{2,60}?)\s*\(on behalf of (?:Seller|Developer)\)/i);
+    if (sellerMatch) analysis.deal.developer = sellerMatch[1].trim();
 
-    if (!analysis.deal.developer) {
-      // "Seller:\n\nDeveloper Earthly Pizza" or "Seller:\n\nEarthly Pizza"
-      const m = termSheet.match(/^Seller:\s*\n\n\s*(?:Developer\s+|Seller\s+)?([A-Z][^\n]+)/m);
-      if (m) analysis.deal.developer = m[1].trim();
-    }
+    // PROJECT
+    const projectMatch = termSheet.match(/^Project:\s*\n\n\s*([A-Z][^\n]+)/m);
+    if (projectMatch) analysis.deal.project = projectMatch[1].trim();
 
-    if (!analysis.deal.developer) {
-      // Confidentiality fallback: "CompanyName (on behalf of Seller)"
-      const m = termSheet.match(/([A-Z][A-Za-z0-9\s,\.&'-]{2,60}?)\s*\(on behalf of (?:Seller|Developer)\)/i);
-      if (m) analysis.deal.developer = m[1].trim();
-    }
-
-    if (!analysis.deal.project) {
-      const m = termSheet.match(/^Project:\s*\n\n\s*([A-Z][^\n]+)/m);
-      if (m) analysis.deal.project = m[1].trim();
-    }
-
-    // COD — handle TCOD, Target COD, double-newline format
-    if (!analysis.deal.cod) {
-      const codPatterns = [
-        /Target(?:ed)?\s+Commercial\s+Operation\s+Date[^:]*:\s*\n\n\s*([^\n]+)/im,
-        /\bTCOD[^:]*:\s*\n\n\s*([^\n]+)/im,
-        /Target(?:ed)?\s+Commercial\s+Operation\s+Date[^:]*:\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d\s*\d{4})/i,
-        /\bTCOD[^:]*:\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d\s*\d{4})/i,
-        /Commercial\s+Operation\s+Date[^:]*:\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d\s*\d{4})/i,
-      ];
-      for (const pat of codPatterns) {
-        const m = termSheet.match(pat);
-        if (m) {
-          // Clean up — take just the date part (first line, strip trailing junk)
-          const raw = m[1].trim();
-          const dateOnly = raw.match(/([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d[\s/]*\d{4}|\d{4})/);
-          analysis.deal.cod = dateOnly ? dateOnly[1] : raw.substring(0, 30);
-          break;
-        }
+    // COD — extract date only, strip trailing sentence text
+    const codPatterns = [
+      /Target(?:ed)?\s+Commercial\s+Operation\s+Date[^:]*:\s*\n\n\s*([^\n]+)/im,
+      /\bTCOD[^:]*:\s*\n\n\s*([^\n]+)/im,
+      /Target(?:ed)?\s+Commercial\s+Operation\s+Date[^:]*:\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d\s*\d{4})/i,
+      /\bTCOD[^:]*:\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d\s*\d{4})/i,
+      /Commercial\s+Operation\s+Date[^:]*:\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d\s*\d{4})/i,
+    ];
+    for (const pat of codPatterns) {
+      const m = termSheet.match(pat);
+      if (m) {
+        const raw = m[1].trim();
+        const dateOnly = raw.match(/([A-Za-z]+\s+\d{1,2},?\s*\d{4}|Q\d[\s/]*\d{4}|\d{4})/);
+        analysis.deal.cod = dateOnly ? dateOnly[1] : raw.substring(0, 30);
+        break;
       }
     }
 
