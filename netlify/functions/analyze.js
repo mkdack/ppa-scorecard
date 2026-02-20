@@ -102,8 +102,8 @@ exports.handler = async (event, context) => {
 
     // Prioritize first 10k + last 5k to capture party definitions and signature blocks
     let truncatedText;
-    if (termSheet.length > 15000) {
-      truncatedText = termSheet.substring(0, 10000) + '\n...[middle truncated]...\n' + termSheet.substring(termSheet.length - 5000);
+    if (termSheet.length > 8000) {
+      truncatedText = termSheet.substring(0, 6000) + '\n...[middle truncated]...\n' + termSheet.substring(termSheet.length - 2000);
     } else {
       truncatedText = termSheet;
     }
@@ -117,7 +117,7 @@ exports.handler = async (event, context) => {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 4000,
+        max_tokens: 1500,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: `Analyze this VPPA/PPA term sheet.
 
