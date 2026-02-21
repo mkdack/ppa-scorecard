@@ -58,16 +58,28 @@ exports.handler = async (event, context) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Term sheet too short' }) };
     }
 
-    // Only analyze terms that scored above 40 (seller-favorable or worse)
+    // Only analyze genuinely flagged terms (seller-favorable or worse), cap at 10
     const flaggedTerms = Object.entries(scores || {})
-      .filter(([, score]) => score > 40)
+      .filter(([, score]) => score > 55)
+      .sort(([, a], [, b]) => b - a)  // highest scores first
+      .slice(0, 10)
       .map(([term]) => term);
+
+    // If nothing flagged, analyze top 5 by score
+    if (flaggedTerms.length === 0) {
+      const top5 = Object.entries(scores || {})
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 5)
+        .map(([term]) => term);
+      flaggedTerms.push(...top5);
+    }
 
     // Truncate term sheet for context
     const truncated = termSheet.length > 10000
       ? termSheet.substring(0, 8000) + '\n...[truncated]...\n' + termSheet.substring(termSheet.length - 2000)
       : termSheet;
 
+    console.log('Deep analysis — flagged terms to analyze:', flaggedTerms);
     const userPrompt = `Analyze this VPPA/PPA term sheet. Focus your termAnalysis ONLY on these flagged terms: ${flaggedTerms.join(', ')}.
 
 Term sheet:
@@ -85,7 +97,7 @@ Provide analysis for each flagged term based on what the term sheet actually say
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 4000,
+        max_tokens: 3000,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userPrompt }]
       })
@@ -109,11 +121,11 @@ Provide analysis for each flagged term based on what the term sheet actually say
     result.missingProtections = result.missingProtections || [];
     result.executiveSummary = result.executiveSummary || '';
 
-    console.log('DEEP ANALYSIS Duration:', Date.now(), 'flagged terms:', flaggedTerms.length);
+    console.log('DEEP ANALYSIS OK — flagged terms:', flaggedTerms.length, 'response chars:', content.length);
     return { statusCode: 200, headers, body: JSON.stringify(result) };
 
   } catch (error) {
-    console.error('Deep analysis error:', error);
+    console.error('Deep analysis error:', error.message, error.stack?.substring(0, 300));
     return {
       statusCode: 500,
       headers,
