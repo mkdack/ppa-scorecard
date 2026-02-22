@@ -228,25 +228,22 @@ async function analyzeTermSheet() {
 // ═══════════════════════════════════════════════════════════════
 
 async function analyzeWithClaude(termSheet) {
-  updateProgress(20, 'Sending to Claude...', 'AI analysis in progress');
+  updateProgress(20, 'Extracting facts...', 'Haiku reading term sheet');
 
-  // Animate progress bar so it doesn't look frozen during API wait
   const messages = [
-    [25, 'Reading term structure...'],
-    [32, 'Scanning pricing terms...'],
-    [40, 'Analyzing curtailment provisions...'],
-    [47, 'Reviewing credit & collateral...'],
-    [54, 'Checking project development terms...'],
-    [61, 'Evaluating contract terms...'],
-    [67, 'Scoring legal provisions...'],
+    [28, 'Reading party names & pricing...'],
+    [36, 'Extracting curtailment terms...'],
+    [44, 'Reading credit & collateral...'],
+    [52, 'Extracting development terms...'],
+    [60, 'Reading legal provisions...'],
   ];
   let msgIdx = 0;
   const progressTimer = setInterval(() => {
     if (msgIdx < messages.length) {
       const [pct, label] = messages[msgIdx++];
-      updateProgress(pct, label, 'AI analysis in progress');
+      updateProgress(pct, label, 'Fact extraction in progress');
     }
-  }, 2000);
+  }, 1500);
 
   let response;
   const controller = new AbortController();
@@ -263,7 +260,7 @@ async function analyzeWithClaude(termSheet) {
     clearInterval(progressTimer);
   }
 
-  updateProgress(75, 'Processing AI response...', 'Extracting scores');
+  updateProgress(70, 'Scoring with rules engine...', 'Applying 35-term spec');
   
   if (!response.ok) {
     const error = await response.json();
@@ -271,12 +268,83 @@ async function analyzeWithClaude(termSheet) {
   }
   
   const data = await response.json();
-  
-  // Validate the response structure
-  if (!data.terms || typeof data.terms !== 'object') {
-    throw new Error('Invalid response format from AI');
+
+  // Three-stage architecture: Haiku returns { facts }, scoring engine runs client-side
+  if (data.facts && typeof data.facts === 'object') {
+    updateProgress(75, 'Running scoring engine...', 'Applying 35-term spec');
+
+    if (typeof window.ScoringEngine === 'undefined') {
+      throw new Error('Scoring engine not loaded — reload the page.');
+    }
+
+    const engineResult = window.ScoringEngine.scoreAll(data.facts);
+    const scores = engineResult.scores;
+    const termFlags = engineResult.termFlags;
+    const interactions = engineResult.interactions;
+
+    const CATEGORY_WEIGHTS = {
+      pricing:      0.25,
+      curtailment:  0.10,
+      development:  0.20,
+      credit:       0.15,
+      contract:     0.15,
+      environmental:0.10,
+      legal:        0.05,
+    };
+    const CATEGORY_TERMS = {
+      pricing:      ['strike','floating','interval','negprice','invoice','basis','marketdisrupt'],
+      curtailment:  ['scheduling','curtailment','nonecocurtail','basiscurtail'],
+      development:  ['ia','cp','delay','availmech','availguaranteed','permit','cod'],
+      credit:       ['buyerpa','sellerpa'],
+      contract:     ['assign','fm','eod','eterm','changeinlaw','reputation'],
+      environmental:['product','recs','incentives'],
+      legal:        ['govlaw','conf','excl','expenses','acct','publicity'],
+    };
+
+    let overallScore = 0;
+    for (const [cat, weight] of Object.entries(CATEGORY_WEIGHTS)) {
+      const terms = CATEGORY_TERMS[cat];
+      const validScores = terms.map(t => scores[t]).filter(s => s != null);
+      const avg = validScores.length > 0 ? validScores.reduce((a, b) => a + b, 0) / validScores.length : 50;
+      overallScore += avg * weight;
+    }
+    overallScore = Math.round(overallScore);
+
+    const RATINGS = [[26,'Strong Buy'],[41,'Acceptable'],[56,'Caution'],[71,'Concern'],[101,'Walk Away']];
+    const overallRating = (RATINGS.find(([max]) => overallScore < max) || [101,'Walk Away'])[1];
+
+    const redFlags = [];
+    for (const [term, flags] of Object.entries(termFlags)) {
+      for (const msg of flags) redFlags.push({ term, message: msg });
+    }
+    for (const ix of interactions) {
+      redFlags.push({ term: ix.terms.join('+'), message: ix.message, isInteraction: true });
+    }
+
+    window.lastExtractedFacts = data.facts;
+
+    // Normalize deal: applyAnalysis expects deal.tech, scoring engine uses deal.technology
+    const deal = Object.assign({}, data.facts.deal);
+    if (!deal.tech && deal.technology) deal.tech = deal.technology;
+    if (!deal.technology && deal.tech) deal.technology = deal.tech;
+
+    return {
+      deal,
+      terms: scores,
+      termFlags,
+      interactions,
+      redFlags,
+      overallRating,
+      overallScore,
+      _source: 'scoring_engine',
+    };
   }
-  
+
+  // Legacy: returned { terms } directly
+  if (!data.terms || typeof data.terms !== 'object') {
+    throw new Error('Invalid response format from AI — no facts or terms in response.');
+  }
+
   return data;
 }
 
@@ -1050,9 +1118,8 @@ function applyAnalysis(analysis) {
     rawDeal: analysis.deal
   });
   
-  // Alert for debugging - remove after fixing
-  const debugInfo = analysis._debug || {};
-  alert(`DEAL EXTRACTED:\nBuyer: ${DEAL.buyer}\nSeller: ${DEAL.seller}\nProject: ${DEAL.projectName}\nCOD: ${DEAL.cod}\n\nRAW CLAUDE RESPONSE:\n${debugInfo.rawClaudeResponse || 'N/A'}`);
+  // Debug info logged to console only
+  console.log('Analysis applied via', analysis._source || 'rule-based');
 }
 
 function updateHeaderDisplay() {
