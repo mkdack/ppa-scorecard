@@ -52,17 +52,13 @@ exports.handler = async (event, context) => {
   if (!apiKey) return { statusCode: 500, headers, body: JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }) };
 
   try {
-    const { termSheet, scores } = JSON.parse(event.body);
+    const { termSheet, scores, facts } = JSON.parse(event.body);
 
-    if (!termSheet || termSheet.trim().length < 50) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Term sheet too short' }) };
-    }
-
-    // Only analyze genuinely flagged terms (seller-favorable or worse), cap at 10
+    // Only analyze genuinely flagged terms (seller-favorable or worse), cap at 8
     const flaggedTerms = Object.entries(scores || {})
       .filter(([, score]) => score > 55)
-      .sort(([, a], [, b]) => b - a)  // highest scores first
-      .slice(0, 10)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 8)
       .map(([term]) => term);
 
     // If nothing flagged, analyze top 5 by score
@@ -74,19 +70,33 @@ exports.handler = async (event, context) => {
       flaggedTerms.push(...top5);
     }
 
-    // Truncate term sheet for context
-    const truncated = termSheet.length > 10000
-      ? termSheet.substring(0, 8000) + '\n...[truncated]...\n' + termSheet.substring(termSheet.length - 2000)
-      : termSheet;
-
     console.log('Deep analysis — flagged terms to analyze:', flaggedTerms);
-    const userPrompt = `Analyze this VPPA/PPA term sheet. Focus your termAnalysis ONLY on these flagged terms: ${flaggedTerms.join(', ')}.
 
-Term sheet:
-${truncated}
+    // Prefer pre-extracted facts over raw term sheet (faster, avoids re-reading)
+    let context;
+    if (facts && typeof facts === 'object') {
+      // Build a compact facts summary for flagged terms only
+      const relevantFacts = {};
+      for (const term of flaggedTerms) {
+        if (facts[term]) relevantFacts[term] = facts[term];
+      }
+      relevantFacts.deal = facts.deal || {};
+      context = `Pre-extracted facts (structured):\n${JSON.stringify(relevantFacts, null, 2)}`;
+    } else if (termSheet && termSheet.trim().length >= 50) {
+      const truncated = termSheet.length > 8000
+        ? termSheet.substring(0, 6000) + '\n...[truncated]...\n' + termSheet.substring(termSheet.length - 2000)
+        : termSheet;
+      context = `Raw term sheet:\n${truncated}`;
+    } else {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'No term sheet or facts provided' }) };
+    }
+
+    const userPrompt = `You are analyzing a VPPA/PPA. Focus termAnalysis ONLY on these flagged terms: ${flaggedTerms.join(', ')}.
+
+${context}
 
 For the termAnalysis object, use exactly these term IDs as keys: ${flaggedTerms.join(', ')}
-Provide analysis for each flagged term based on what the term sheet actually says (or omits) about that topic.`;
+Analyze each term based on what the facts say (or omit).`;
 
     const response = await fetch(ANTHROPIC_API_URL, {
       method: 'POST',
@@ -96,7 +106,7 @@ Provide analysis for each flagged term based on what the term sheet actually say
         'anthropic-version': ANTHROPIC_VERSION
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
+        model: 'claude-sonnet-4-6',
         max_tokens: 3000,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userPrompt }]

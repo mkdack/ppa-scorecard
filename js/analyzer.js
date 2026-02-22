@@ -1245,7 +1245,8 @@ async function runDeepAnalysis() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         termSheet: window.lastTermSheet,
-        scores: window.sliderValues || {}
+        scores: window.sliderValues || {},
+        facts: window.lastExtractedFacts || null
       }),
       signal: controller.signal
     });
